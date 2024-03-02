@@ -9,42 +9,59 @@ torch.set_default_device('cuda')
 torch.set_default_dtype(torch.float32)
 
 
-BLOCKSIZE = 1024
-
 TENSOR_FORMAT = 'sbhd'
 FUSED = False
 
-S = 4
-B = 6
-H = 8
+S = 10
+B = 100
+H = 100
 D = 1024
 SHAPE = (S, B, H, D)
-
-S2 = S + 10
-D2 = max(10, D - 10)
-SHAPE2 = (S2, 1, 1, D2)
-
-assert S2 >= S
-assert D%2 == 0
-assert D2%2 == 0
-assert D2 <= D <= BLOCKSIZE
-
+SHAPE_FREQS = (S, 1, 1, D)
 
 def main():
     print('hello')
 
+    # Events for timing
+    start_event = torch.cuda.Event(enable_timing=True)
+    end_event = torch.cuda.Event(enable_timing=True)
+
+    # Random tensors for experimentation
     t = torch.randn(SHAPE, requires_grad=True)
-    freqs = torch.randn(SHAPE2, requires_grad=True)
+    freqs = torch.randn(SHAPE_FREQS, requires_grad=True)
+    grad = torch.randn_like(t)
+
+    # Torch forward
+    start_event.record()
     emb = ref.apply_rotary_pos_emb(t, freqs, tensor_format=TENSOR_FORMAT, fused=FUSED)
-    grad = torch.randn_like(emb)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print(f'elapsed time torch fw: {elapsed_time_ms:.03f}')
+
+    # Torch backward
+    start_event.record()
     emb.backward(grad)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print(f'elapsed time torch bw: {elapsed_time_ms:.03f}')
 
-    emb_rope = torch.empty_like(emb)
+
+
+    emb_triton = torch.empty_like(emb)
     grid = (S, )
-    rope_fw[grid](t, S, B, H, D, freqs, S2, D2, emb_rope)
 
-    diff = emb - emb_rope
-    
+    start_event.record()
+    rope_fw[grid](t, freqs, S, B, H, D, emb_triton)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+    print(f'elapsed time triton fw: {elapsed_time_ms:.03f}')
+
+    diff = emb - emb_triton
+    diff_max = diff.abs().max().item()
+    print(f'diff_max: {diff_max:.20f}')
     print('bye')
 
 
@@ -53,19 +70,17 @@ def main():
 @triton.jit
 def rope_fw(
     t_ptr, 
+    freqs_ptr, 
     S: tl.constexpr, 
     B: tl.constexpr, 
     H: tl.constexpr, 
     D: tl.constexpr, 
-    freqs_ptr, 
-    S2: tl.constexpr, 
-    D2: tl.constexpr,
     output_ptr,
 ):
     pid = tl.program_id(0)
 
-    freqs_0 = tl.load(freqs_ptr + pid*D2 + tl.arange(0, D2//2))
-    freqs_1 = tl.load(freqs_ptr + pid*D2 + tl.arange(D2//2, D2))
+    freqs_0 = tl.load(freqs_ptr + pid*D + tl.arange(0, D//2))
+    freqs_1 = tl.load(freqs_ptr + pid*D + tl.arange(D//2, D))
     sin_0 = tl.sin(freqs_0)
     sin_1 = tl.sin(freqs_1)
     cos_0 = tl.cos(freqs_0)
@@ -74,16 +89,14 @@ def rope_fw(
     for b in range(B):
         for h in range(H):
             offset = pid*B*H*D + b*H*D + h*D
-            t_0 = tl.load(t_ptr + offset + tl.arange(0, D2//2))
-            t_1 = tl.load(t_ptr + offset + tl.arange(D2//2, D2))
-            t_2 = tl.load(t_ptr + offset + tl.arange(D2, D))
+            t_0 = tl.load(t_ptr + offset + tl.arange(0, D//2))
+            t_1 = tl.load(t_ptr + offset + tl.arange(D//2, D))
 
             emb_0 = t_0*cos_0 - t_1*sin_0
-            emb_1 = t_1*sin_1 + t_0*cos_1
-            emb_2 = t_2
+            emb_1 = t_1*cos_1 + t_0*sin_1
 
-
-
+            tl.store(output_ptr + offset + tl.arange(0, D//2), emb_0)
+            tl.store(output_ptr + offset + tl.arange(D//2, D), emb_1)
 
 
 

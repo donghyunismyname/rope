@@ -16,7 +16,7 @@ S = 10
 B = 100
 H = 100
 D = 1024
-SHAPE = (S, B, H, D)
+SHAPE_T = (S, B, H, D)
 SHAPE_FREQS = (S, 1, 1, D)
 
 
@@ -38,7 +38,7 @@ def main():
     print('==== hello ====')
 
     # Random tensors for experimentation
-    t = torch.randn(SHAPE, requires_grad=True)
+    t = torch.randn(SHAPE_T, requires_grad=True)
     freqs = torch.randn(SHAPE_FREQS, requires_grad=True)
     grad = torch.randn_like(t)
 

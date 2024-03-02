@@ -91,14 +91,19 @@ def rope_numpy(t, freqs, grad):
 
 
 def test_rope_numpy():
+    # Create random tensors
     t = torch.randn(SHAPE, requires_grad=True)
     freqs = torch.randn(SHAPE2, requires_grad=True)
+    grad = torch.randn(SHAPE)
+
+    # Torch forward and backward pass
     emb = ref.apply_rotary_pos_emb(t, freqs, tensor_format=TENSOR_FORMAT, fused=FUSED)
-    grad = torch.randn_like(emb)
     emb.backward(grad)
 
+    # Numpy forward and backward pass
     np_emb, np_t_grad, np_freqs_grad = rope_numpy(t, freqs, grad)
 
+    # Show differences
     diff_emb = emb - np_emb
     diff_t_grad = t.grad - np_t_grad
     diff_freqs_grad = freqs.grad - np_freqs_grad

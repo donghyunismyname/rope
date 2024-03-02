@@ -45,30 +45,40 @@ def rope_numpy(t, freqs, grad):
     sin = np.sin(freqs_cut)
 
     d = freqs_cut.shape[-1]
-    t_cut, t_pass = t[..., :d], t[..., d:]
+    cos_0 = cos[..., :d//2]
+    cos_1 = cos[..., d//2:]
+    sin_0 = sin[..., :d//2]
+    sin_1 = sin[..., d//2:]
 
-    h = t_cut.shape[-1] // 2
-    t0 = t_cut[..., :h]
-    t1 = t_cut[..., h:]
-    t_cut_rot = np.concatenate([-t1, t0], axis=-1)
+    t_0 = t[..., :d//2]
+    t_1 = t[..., d//2:d]
+    t_2 = t[..., d:]
 
-    lincomb = t_cut * cos + t_cut_rot * sin
-    emb = np.concatenate([lincomb, t_pass], axis=-1)
+    emb_0 = t_0 * cos_0 - t_1 * sin_0
+    emb_1 = t_1 * cos_1 + t_0 * sin_1
+    emb_2 = t_2
+    emb = np.concatenate([emb_0, emb_1, emb_2], axis=-1)
 
     # ==== Backward ====
     emb_grad = grad
-    lincomb_grad = emb_grad[..., :d]
-    t_pass_grad = emb_grad[..., d:]
-    t_cut_grad = lincomb_grad * cos
-    t_cut_rot_grad = lincomb_grad * sin
-    cos_grad = (t_cut * lincomb_grad).sum(axis=(1, 2), keepdims=True)
-    sin_grad = (t_cut_rot * lincomb_grad).sum(axis=(1, 2), keepdims=True)
+    emb_0_grad = emb_grad[..., :d//2]
+    emb_1_grad = emb_grad[..., d//2:d]
+    emb_2_grad = emb_grad[..., d:]
 
-    t_cut_grad[..., :h] += t_cut_rot_grad[..., h:]
-    t_cut_grad[..., h:] += -t_cut_rot_grad[..., :h]
-    t_grad = np.concatenate([t_cut_grad, t_pass_grad], axis=-1)
+    t_0_grad = emb_0_grad * cos_0 + emb_1_grad * sin_1
+    t_1_grad = -emb_0_grad * sin_0 + emb_1_grad * cos_1
+    t_2_grad = emb_2_grad
+    t_grad = np.concatenate([t_0_grad, t_1_grad, t_2_grad], axis=-1)
 
+    cos_0_grad = (t_0 * emb_0_grad).sum(axis=(1, 2), keepdims=True)
+    cos_1_grad = (t_1 * emb_1_grad).sum(axis=(1, 2), keepdims=True)
+    sin_0_grad = (-t_1 * emb_0_grad).sum(axis=(1, 2), keepdims=True)
+    sin_1_grad = (t_0 * emb_1_grad).sum(axis=(1, 2), keepdims=True)
+
+    cos_grad = np.concatenate([cos_0_grad, cos_1_grad], axis=-1)
+    sin_grad = np.concatenate([sin_0_grad, sin_1_grad], axis=-1)
     freqs_cut_grad = -sin*cos_grad + cos*sin_grad
+
     freqs_grad = np.zeros_like(freqs)
     freqs_grad[:t.shape[0]] = freqs_cut_grad
 

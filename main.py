@@ -78,6 +78,9 @@ def rope_fw(
             t_1 = tl.load(t_ptr + offset + tl.arange(D2//2, D2))
             t_2 = tl.load(t_ptr + offset + tl.arange(D2, D))
 
+            emb_0 = t_0*cos_0 - t_1*sin_0
+            emb_1 = t_1*sin_1 + t_0*cos_1
+            emb_2 = t_2
 
 
 

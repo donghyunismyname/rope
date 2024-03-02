@@ -1,7 +1,7 @@
 import torch
 import triton
-import numpy as np
 import triton.language as tl
+import numpy as np
 import ipdb
 import ref
 
@@ -51,6 +51,10 @@ def main():
 
 
 def rope_numpy(t, freqs, grad):
+    '''
+    Forward and backward pass of the RoPE operation in numpy.
+    '''
+    # ==== Type Conversion ====
     t = t.detach().cpu().numpy()
     freqs = freqs.detach().cpu().numpy()
     grad = grad.detach().cpu().numpy()
@@ -72,16 +76,28 @@ def rope_numpy(t, freqs, grad):
     emb = np.concatenate([lincomb, t_pass], axis=-1)
 
     # ==== Backward ====
-    # emb_grad = grad
-    # t_grad = emb_grad * cos
-    # tt_grad = emb_grad * sin
+    emb_grad = grad
+    lincomb_grad = emb_grad[..., :d]
+    t_pass_grad = emb_grad[..., d:]
+    t_cut_grad = lincomb_grad * cos
+    t_cut_rot_grad = lincomb_grad * sin
+    cos_grad = (t_cut * lincomb_grad).sum(axis=(1, 2), keepdims=True)
+    sin_grad = (t_cut_rot * lincomb_grad).sum(axis=(1, 2), keepdims=True)
 
-    
+    t_cut_grad[..., :h] += t_cut_rot_grad[..., h:]
+    t_cut_grad[..., h:] += -t_cut_rot_grad[..., :h]
+    t_grad = np.concatenate([t_cut_grad, t_pass_grad], axis=-1)
 
-    
+    freqs_cut_grad = -sin*cos_grad + cos*sin_grad
+    freqs_grad = np.zeros_like(freqs)
+    freqs_grad[:t.shape[0]] = freqs_cut_grad
+
+    # ==== Type Conversion ==== 
     emb = torch.tensor(emb)
+    t_grad = torch.tensor(t_grad)
+    freqs_grad = torch.tensor(freqs_grad)
 
-    return emb
+    return emb, t_grad, freqs_grad
 
 
 def test_rope_numpy():
@@ -91,12 +107,20 @@ def test_rope_numpy():
     grad = torch.randn_like(emb)
     emb.backward(grad)
 
-    emb_numpy = rope_numpy(t, freqs, grad)
+    np_emb, np_t_grad, np_freqs_grad = rope_numpy(t, freqs, grad)
 
-    diff_emb = emb - emb_numpy
-    print(f'diff: {diff_emb.abs().max().item():.10f}');
+    diff_emb = emb - np_emb
+    diff_t_grad = t.grad - np_t_grad
+    diff_freqs_grad = freqs.grad - np_freqs_grad
 
-    ipdb.set_trace()
+    diff_emb_max = diff_emb.abs().max().item()
+    diff_t_grad_max = diff_t_grad.abs().max().item()
+    diff_freqs_grad_max = diff_freqs_grad.abs().max().item()
+
+    print(f'diff_emb_max: {diff_emb_max:.20f}');
+    print(f'diff_t_grad_max: {diff_t_grad_max:.20f}');
+    print(f'diff_freqs_grad_max: {diff_freqs_grad_max:.20f}');
+
 
 
 

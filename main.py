@@ -30,7 +30,7 @@ def measure_cuda_time(msg, func, *args, **kwargs):
     torch.cuda.synchronize()
     elapsed_time_ms = start_event.elapsed_time(end_event)
 
-    print(f'{msg}: {elapsed_time_ms:.03f}')
+    print(f'{msg}: {elapsed_time_ms:.03f} ms')
     return ret
 
 

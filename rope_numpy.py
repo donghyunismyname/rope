@@ -97,9 +97,9 @@ def test_rope_numpy():
     diff_t_grad_max = diff_t_grad.abs().max().item()
     diff_freqs_grad_max = diff_freqs_grad.abs().max().item()
 
-    print(f'diff_emb_max: {diff_emb_max:.20f}');
-    print(f'diff_t_grad_max: {diff_t_grad_max:.20f}');
-    print(f'diff_freqs_grad_max: {diff_freqs_grad_max:.20f}');
+    print(f'diff_emb_max: {diff_emb_max:.20f}')
+    print(f'diff_t_grad_max: {diff_t_grad_max:.20f}')
+    print(f'diff_freqs_grad_max: {diff_freqs_grad_max:.20f}')
 
 
 if __name__ == '__main__':

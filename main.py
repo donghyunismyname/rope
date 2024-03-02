@@ -19,12 +19,23 @@ D = 1024
 SHAPE = (S, B, H, D)
 SHAPE_FREQS = (S, 1, 1, D)
 
-def main():
-    print('hello')
 
-    # Events for timing
+def measure_cuda_time(msg, func, *args, **kwargs):
     start_event = torch.cuda.Event(enable_timing=True)
     end_event = torch.cuda.Event(enable_timing=True)
+
+    start_event.record()
+    ret = func(*args, **kwargs)
+    end_event.record()
+    torch.cuda.synchronize()
+    elapsed_time_ms = start_event.elapsed_time(end_event)
+
+    print(f'{msg}: {elapsed_time_ms:.03f}')
+    return ret
+
+
+def main():
+    print('hello')
 
     # Random tensors for experimentation
     t = torch.randn(SHAPE, requires_grad=True)
@@ -32,36 +43,28 @@ def main():
     grad = torch.randn_like(t)
 
     # Torch forward
-    start_event.record()
-    emb = ref.apply_rotary_pos_emb(t, freqs, tensor_format=TENSOR_FORMAT, fused=FUSED)
-    end_event.record()
-    torch.cuda.synchronize()
-    elapsed_time_ms = start_event.elapsed_time(end_event)
-    print(f'elapsed time torch fw: {elapsed_time_ms:.03f}')
+    msg = 'elapsed time torch fw'
+    emb = measure_cuda_time(msg, ref.apply_rotary_pos_emb, t, freqs, tensor_format=TENSOR_FORMAT, fused=FUSED)
 
     # Torch backward
-    start_event.record()
-    emb.backward(grad)
-    end_event.record()
-    torch.cuda.synchronize()
-    elapsed_time_ms = start_event.elapsed_time(end_event)
-    print(f'elapsed time torch bw: {elapsed_time_ms:.03f}')
+    msg = 'elapsed time torch bw'
+    measure_cuda_time(msg, emb.backward, grad)
 
 
-
+    # Prepare for triton
     emb_triton = torch.empty_like(emb)
     grid = (S, )
 
-    start_event.record()
-    rope_fw[grid](t, freqs, S, B, H, D, emb_triton)
-    end_event.record()
-    torch.cuda.synchronize()
-    elapsed_time_ms = start_event.elapsed_time(end_event)
-    print(f'elapsed time triton fw: {elapsed_time_ms:.03f}')
+    # Triton forward
+    msg = 'elapsed time triton fw'
+    measure_cuda_time(msg, rope_fw[grid], t, freqs, S, B, H, D, emb_triton)
 
-    diff = emb - emb_triton
-    diff_max = diff.abs().max().item()
-    print(f'diff_max: {diff_max:.20f}')
+    # Triton backward
+
+    # Show differences
+    diff_emb = emb - emb_triton
+    diff_emb_max = diff_emb.abs().max().item()
+    print(f'diff_emb_max: {diff_emb_max:.20f}')
     print('bye')
 
 
@@ -101,7 +104,16 @@ def rope_fw(
 
 
 @triton.jit
-def rope_bw(t: torch.Tensor, freqs: torch.Tensor, emb: torch.Tensor, grad: torch.Tensor):
+def rope_bw(
+    t_ptr, 
+    freqs_ptr, 
+    S: tl.constexpr, 
+    B: tl.constexpr, 
+    H: tl.constexpr, 
+    D: tl.constexpr, 
+    t_grad_ptr,
+    freqs_grad_ptr,
+):
     pass
 
 

@@ -164,8 +164,10 @@ def rope_bw(
             sin_0_grad += -t_1 * emb_0_grad
             sin_1_grad += t_0 * emb_1_grad
     
-    tl.store(output_freqs_grad_ptr + pid*D + tl.arange(0, D//2), -sin_0*cos_0_grad + cos_0*sin_0_grad)
-    tl.store(output_freqs_grad_ptr + pid*D + tl.arange(D//2, D), -sin_1*cos_1_grad + cos_1*sin_1_grad)
+    freqs_grad_0 = -sin_0*cos_0_grad + cos_0*sin_0_grad
+    freqs_grad_1 = -sin_1*cos_1_grad + cos_1*sin_1_grad
+    tl.store(output_freqs_grad_ptr + pid*D + tl.arange(0, D//2), freqs_grad_0)
+    tl.store(output_freqs_grad_ptr + pid*D + tl.arange(D//2, D), freqs_grad_1)
 
 
 

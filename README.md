@@ -22,3 +22,8 @@ diff_t_grad_max: 0.00000047683715820312
 diff_freqs_grad_max: 0.00062561035156250000
 ==== bye ====
 ```
+
+## Run
+```
+python main.py
+```

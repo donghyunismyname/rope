@@ -12,9 +12,9 @@ torch.set_default_dtype(torch.float32)
 TENSOR_FORMAT = 'sbhd'
 FUSED = False
 
-S = 10
-B = 100
-H = 100
+S = 64
+B = 64
+H = 64
 D = 1024
 SHAPE_T = (S, B, H, D)
 SHAPE_FREQS = (S, 1, 1, D)

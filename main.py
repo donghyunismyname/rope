@@ -91,7 +91,7 @@ def rope_fw(
     B: tl.constexpr, 
     H: tl.constexpr, 
     D: tl.constexpr, 
-    output_ptr,
+    output_emb_ptr,
 ):
     pid = tl.program_id(0)
 
@@ -111,8 +111,8 @@ def rope_fw(
             emb_0 = t_0*cos_0 - t_1*sin_0
             emb_1 = t_1*cos_1 + t_0*sin_1
 
-            tl.store(output_ptr + offset + tl.arange(0, D//2), emb_0)
-            tl.store(output_ptr + offset + tl.arange(D//2, D), emb_1)
+            tl.store(output_emb_ptr + offset + tl.arange(0, D//2), emb_0)
+            tl.store(output_emb_ptr + offset + tl.arange(D//2, D), emb_1)
 
 
 
@@ -125,8 +125,8 @@ def rope_bw(
     H: tl.constexpr, 
     D: tl.constexpr, 
     ptr_grad,
-    t_grad_ptr,
-    freqs_grad_ptr,
+    output_t_grad_ptr,
+    output_freqs_grad_ptr,
 ):
     pid = tl.program_id(0)
 
@@ -156,16 +156,16 @@ def rope_bw(
 
             t_0_grad = emb_0_grad*cos_0 + emb_1_grad*sin_1
             t_1_grad = -emb_0_grad*sin_0 + emb_1_grad*cos_1
-            tl.store(t_grad_ptr + offset + tl.arange(0, D//2), t_0_grad)
-            tl.store(t_grad_ptr + offset + tl.arange(D//2, D), t_1_grad)
+            tl.store(output_t_grad_ptr + offset + tl.arange(0, D//2), t_0_grad)
+            tl.store(output_t_grad_ptr + offset + tl.arange(D//2, D), t_1_grad)
 
             cos_0_grad += t_0 * emb_0_grad
             cos_1_grad += t_1 * emb_1_grad
             sin_0_grad += -t_1 * emb_0_grad
             sin_1_grad += t_0 * emb_1_grad
     
-    tl.store(freqs_grad_ptr + pid*D + tl.arange(0, D//2), -sin_0*cos_0_grad + cos_0*sin_0_grad)
-    tl.store(freqs_grad_ptr + pid*D + tl.arange(D//2, D), -sin_1*cos_1_grad + cos_1*sin_1_grad)
+    tl.store(output_freqs_grad_ptr + pid*D + tl.arange(0, D//2), -sin_0*cos_0_grad + cos_0*sin_0_grad)
+    tl.store(output_freqs_grad_ptr + pid*D + tl.arange(D//2, D), -sin_1*cos_1_grad + cos_1*sin_1_grad)
 
 
 

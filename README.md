@@ -5,7 +5,7 @@ A Triton implementation mimicking the
 
 ## Environment
 ```
-docker pull donghyunismyanme/rope:1.0
+docker pull donghyunismyname/rope:1.0
 ```
 
 
